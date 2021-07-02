@@ -409,8 +409,6 @@ static LPBYTE CreateListFile(TMPQArchive * ha, DWORD * pcbListFile)
 static DWORD SListFileCreateNodeForAllLocales(TMPQArchive * ha, const char * szFileName)
 {
     TFileEntry * pFileEntry;
-    TMPQHash * pFirstHash;
-    TMPQHash * pHash;
 
     // If we have HET table, use that one
     if(ha->pHetTable != NULL)
@@ -428,15 +426,15 @@ static DWORD SListFileCreateNodeForAllLocales(TMPQArchive * ha, const char * szF
     // If we have hash table, we use it
     if(ha->pHashTable != NULL)
     {
-        // Go while we found something
-        pFirstHash = pHash = GetFirstHashEntry(ha, szFileName);
-        while(pHash != NULL)
-        {
-            // Allocate file name for the file entry
-            AllocateFileName(ha, ha->pFileTable + MPQ_BLOCK_INDEX(pHash), szFileName);
+        MPQ_HASH_ENTRIES Entries;
 
-            // Now find the next language version of the file
-            pHash = GetNextHashEntry(ha, pFirstHash, pHash);
+        // Find all candidates on the file
+        if(FindHashEntry(ha, szFileName, g_FileLocale, g_Platform, Entries))
+        {
+            if(Entries.pHashEntry1 != NULL)
+                AllocateFileName(ha, Entries.pHashEntry1, szFileName);
+            if(Entries.pHashEntry2 != NULL)
+                AllocateFileName(ha, Entries.pHashEntry2, szFileName);
         }
 
         return ERROR_SUCCESS;
@@ -519,12 +517,30 @@ static DWORD SFileAddArbitraryListFile(
         char * szFileName;
         size_t nLength = 0;
 
-        // Get the next line
+        //
+        // Masin2Rpg3.25.w3x: Contains hash entries with different names pointing go the same data
+        // 
+        // * HashEntry[0x2548].dwName1 = 0x63871D87 -> "(2)Harrow.w3m"
+        //   HashEntry[0x2548].dwName2 = 0x57a93D90 -> "(2)Harrow.w3m"
+        //   HashEntry[0x2548].dwBlockIndex -> 0x7829
+        // * HashEntry[0x3B1C].dwName1 = 0xa062c60a -> "scripts\\war3map.j"
+        //   HashEntry[0x3B1C].dwName2 = 0x3982f334 -> "scripts\\war3map.j"
+        //   HashEntry[0x3B1C].dwBlockIndex -> 0x7829 CONFLICT
+        // 
+
         while((szFileName = ReadListFileLine(pCache, &nLength)) != NULL)
         {
-            // Add the line to the MPQ
             if(nLength != 0)
+            {
+                // Stop on watched file
+                //if(!_stricmp(szFileName, "(2)Harrow.w3m"))
+                //    __debugbreak();
+                //if(!_stricmp(szFileName, "scripts\\war3map.j"))
+                //    __debugbreak();
+
+                // Second, add file for all locales
                 SListFileCreateNodeForAllLocales(ha, szFileName);
+            }
         }
 
         // Delete the cache
@@ -540,7 +556,7 @@ static DWORD SFileAddInternalListFile(
 {
     TMPQHash * pFirstHash;
     TMPQHash * pHash;
-    LCID lcSaveLocale = g_lcFileLocale;
+    LCID lcSaveLocale = g_FileLocale;
     DWORD dwMaxSize = MAX_LISTFILE_SIZE;
     DWORD dwErrCode = ERROR_SUCCESS;
 

@@ -298,7 +298,7 @@
     #define STORMLIB_32BIT
   #endif
 
-  // __cdecl meand nothing on non-Windows
+  // __cdecl means nothing on non-Windows
   #define STORMLIB_CDECL /* */
 
   // Typedefs for ANSI C

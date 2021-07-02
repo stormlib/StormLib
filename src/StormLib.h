@@ -498,7 +498,7 @@ struct TMPQBits;
 #define MPQ_HEADER_SIZE_V4    0xD0
 #define MPQ_HEADER_DWORDS     (MPQ_HEADER_SIZE_V4 / 0x04)
 
-typedef struct _TMPQUserData
+struct TMPQUserData
 {
     // The ID_MPQ_USERDATA ('MPQ\x1B') signature
     DWORD dwID;
@@ -511,7 +511,7 @@ typedef struct _TMPQUserData
 
     // Appears to be size of user data header (Starcraft II maps)
     DWORD cbUserDataHeader;
-} TMPQUserData;
+};
 
 // MPQ file header
 //
@@ -519,7 +519,7 @@ typedef struct _TMPQUserData
 // Reason: A 64-bit integer at the beginning of 3.0 part,
 // which is offset 0x2C
 #pragma pack(push, 1)
-typedef struct _TMPQHeader
+struct TMPQHeader
 {
     // The ID_MPQ ('MPQ\x1A') signature
     DWORD dwID;
@@ -606,11 +606,11 @@ typedef struct _TMPQHeader
     unsigned char MD5_BetTable[MD5_DIGEST_SIZE];        // MD5 of the BET table before decryption
     unsigned char MD5_HetTable[MD5_DIGEST_SIZE];        // MD5 of the HET table before decryption
     unsigned char MD5_MpqHeader[MD5_DIGEST_SIZE];       // MD5 of the MPQ header from signature to (including) MD5_HetTable
-} TMPQHeader;
+};
 #pragma pack(pop)
 
 // Hash table entry. All files in the archive are searched by their hashes.
-typedef struct _TMPQHash
+struct TMPQHash
 {
     // The hash of the file path, using method A.
     DWORD dwName1;
@@ -644,10 +644,10 @@ typedef struct _TMPQHash
     //  - FFFFFFFEh: Hash table entry is empty, but was valid at some point (a deleted file).
     //               Does not terminate searches for a given file.
     DWORD dwBlockIndex;
-} TMPQHash;
+};
 
 // File description block contains informations about the file
-typedef struct _TMPQBlock
+struct TMPQBlock
 {
     // Offset of the beginning of the file, relative to the beginning of the archive.
     DWORD dwFilePos;
@@ -661,10 +661,10 @@ typedef struct _TMPQBlock
 
     // Flags for the file. See MPQ_FILE_XXXX constants
     DWORD dwFlags;
-} TMPQBlock;
+};
 
 // Patch file information, preceding the sector offset table
-typedef struct _TPatchInfo
+struct TPatchInfo
 {
     DWORD dwLength;                             // Length of patch info header, in bytes
     DWORD dwFlags;                              // Flags. 0x80000000 = MD5 (?)
@@ -672,26 +672,10 @@ typedef struct _TPatchInfo
     BYTE  md5[0x10];                            // MD5 of the entire patch file after decompression
 
     // Followed by the sector table (variable length)
-} TPatchInfo;
-
-// This is the combined file entry for maintaining file list in the MPQ.
-// This structure is combined from block table, hi-block table,
-// (attributes) file and from (listfile).
-typedef struct _TFileEntry
-{
-    ULONGLONG FileNameHash;                     // Jenkins hash of the file name. Only used when the MPQ has BET table.
-    ULONGLONG ByteOffset;                       // Position of the file content in the MPQ, relative to the MPQ header
-    ULONGLONG FileTime;                         // FileTime from the (attributes) file. 0 if not present.
-    DWORD     dwFileSize;                       // Decompressed size of the file
-    DWORD     dwCmpSize;                        // Compressed size of the file (i.e., size of the file data in the MPQ)
-    DWORD     dwFlags;                          // File flags (from block table)
-    DWORD     dwCrc32;                          // CRC32 from (attributes) file. 0 if not present.
-    BYTE      md5[MD5_DIGEST_SIZE];             // File MD5 from the (attributes) file. 0 if not present.
-    char * szFileName;                          // File name. NULL if not known.
-} TFileEntry;
+};
 
 // Common header for HET and BET tables
-typedef struct _TMPQExtHeader
+struct TMPQExtHeader
 {
     DWORD dwSignature;                          // 'HET\x1A' or 'BET\x1A'
     DWORD dwVersion;                            // Version. Seems to be always 1
@@ -699,11 +683,10 @@ typedef struct _TMPQExtHeader
 
     // Followed by the table header
     // Followed by the table data
-
-} TMPQExtHeader;
+};
 
 // Structure for HET table header
-typedef struct _TMPQHetHeader
+struct TMPQHetHeader
 {
     TMPQExtHeader ExtHdr;
 
@@ -715,11 +698,10 @@ typedef struct _TMPQHetHeader
     DWORD dwIndexSizeExtra;                     // Extra bits in the file index
     DWORD dwIndexSize;                          // Effective size of the file index (in bits)
     DWORD dwIndexTableSize;                     // Size of the block index subtable (in bytes)
-
-} TMPQHetHeader;
+};
 
 // Structure for BET table header
-typedef struct _TMPQBetHeader
+struct TMPQBetHeader
 {
     TMPQExtHeader ExtHdr;
 
@@ -742,11 +724,10 @@ typedef struct _TMPQBetHeader
     DWORD dwBitCount_NameHash2;                 // Effective size of NameHash2 (in bits)
     DWORD dwNameHashArraySize;                  // Size of NameHash2 table, in bytes
     DWORD dwFlagCount;                          // Number of flags in the following array
-
-} TMPQBetHeader;
+};
 
 // Structure for parsed HET table
-typedef struct _TMPQHetTable
+struct TMPQHetTable
 {
     TMPQBits * pBetIndexes;                     // Bit array of FileIndex values
     LPBYTE     pNameHashes;                     // Array of NameHash1 values (NameHash1 = upper 8 bits of FileName hashe)
@@ -759,10 +740,10 @@ typedef struct _TMPQHetTable
     DWORD      dwIndexSizeTotal;                // Total size of one entry in pBetIndexes (in bits)
     DWORD      dwIndexSizeExtra;                // Extra bits in the entry in pBetIndexes
     DWORD      dwIndexSize;                     // Effective size of one entry in pBetIndexes (in bits)
-} TMPQHetTable;
+};
 
 // Structure for parsed BET table
-typedef struct _TMPQBetTable
+struct TMPQBetTable
 {
     TMPQBits * pNameHashes;                     // Array of NameHash2 entries (lower 24 bits of FileName hash)
     TMPQBits * pFileTable;                      // Bit-based file table
@@ -784,17 +765,55 @@ typedef struct _TMPQBetTable
     DWORD dwBitCount_NameHash2;                 // Effective size of the NameHash2
     DWORD dwEntryCount;                         // Number of entries
     DWORD dwFlagCount;                          // Number of file flags in pFileFlags
-} TMPQBetTable;
+};
+
+// This is the combined file entry for maintaining file list in the MPQ.
+// This structure is combined from block table, hi-block table,
+// (attributes) file and from (listfile).
+struct TFileEntry
+{
+    ULONGLONG FileNameHash;                     // Jenkins hash of the file name. Only used when the MPQ has BET table.
+    ULONGLONG ByteOffset;                       // Position of the file content in the MPQ, relative to the MPQ header
+    ULONGLONG FileTime;                         // FileTime from the (attributes) file. 0 if not present.
+    DWORD     dwFileSize;                       // Decompressed size of the file
+    DWORD     dwCmpSize;                        // Compressed size of the file (size of the file data in the MPQ)
+    DWORD     dwFlags;                          // File flags (from block table)
+    DWORD     dwCrc32;                          // CRC32 from (attributes) file. 0 if not present.
+    BYTE      md5[MD5_DIGEST_SIZE];             // File MD5 from the (attributes) file. 0 if not present.
+    char * szFileName;                          // File name. NULL if not known.
+};
+
+// Combined hash entry, created either from the legacy hash table, or from HET table.
+struct THashEntry
+{
+    union
+    {
+        ULONGLONG n64;                          // 64-bit value of the file name hash
+
+        struct
+        {
+            DWORD lo;                           // The 1st 32-bit part of the file name
+            DWORD hi;                           // The 2nd 32-bit part of the file name
+        } n32;
+
+    } Name;
+
+    char * szFileName;                          // File name, if known, otherwise NULL
+    DWORD  dwBlockIndex;                        // Index to the file table
+    USHORT Locale;                              // File locale
+    BYTE   Platform;                            // File platform
+    BYTE   Reserved;                            // Nothing, just an alignment
+};
 
 // Structure for patch prefix
-typedef struct _TMPQNamePrefix
+struct TMPQNamePrefix
 {
     size_t nLength;                             // Length of this patch prefix. Can be 0
     char szPatchPrefix[1];                      // Patch name prefix (variable length). If not empty, it always starts with backslash.
-} TMPQNamePrefix;
+};
 
 // Structure for name cache
-typedef struct _TMPQNameCache
+struct TMPQNameCache
 {
     DWORD FirstNameOffset;                      // Offset of the first name in the name list (in bytes)
     DWORD FreeSpaceOffset;                      // Offset of the first free byte in the name cache (in bytes)
@@ -803,11 +822,10 @@ typedef struct _TMPQNameCache
 
     // Followed by search mask (ASCIIZ, '\0' if none)
     // Followed by name cache (ANSI multistring)
-
-} TMPQNameCache;
+};
 
 // Archive handle structure
-typedef struct _TMPQArchive
+struct TMPQArchive
 {
     TFileStream  * pStream;                     // Open stream for the MPQ
 
@@ -815,15 +833,17 @@ typedef struct _TMPQArchive
     ULONGLONG      MpqPos;                      // MPQ header offset (relative to the begin of the file)
     ULONGLONG      FileSize;                    // Size of the file at the moment of file open
 
-    struct _TMPQArchive * haPatch;              // Pointer to patch archive, if any
-    struct _TMPQArchive * haBase;               // Pointer to base ("previous version") archive, if any
+    TMPQArchive  * haPatch;                     // Pointer to patch archive, if any
+    TMPQArchive  * haBase;                      // Pointer to base ("previous version") archive, if any
     TMPQNamePrefix * pPatchPrefix;              // Patch prefix to precede names of patch files
 
     TMPQUserData * pUserData;                   // MPQ user data (NULL if not present in the file)
     TMPQHeader   * pHeader;                     // MPQ file header
-    TMPQHash     * pHashTable;                  // Hash table
+    TMPQHash     * pHashTable;                  // Hash table (old)
     TMPQHetTable * pHetTable;                   // HET table
+
     TFileEntry   * pFileTable;                  // File table
+    THashEntry   * pHashTableX;                  // Hash table
     HASH_STRING    pfnHashString;               // Hashing function that will convert the file name into hash
 
     TMPQUserData   UserData;                    // MPQ user data. Valid only when ID_MPQ_USERDATA has been found
@@ -832,6 +852,7 @@ typedef struct _TMPQArchive
     DWORD          dwHETBlockSize;
     DWORD          dwBETBlockSize;
     DWORD          dwMaxFileCount;              // Maximum number of files in the MPQ. Also total size of the file table.
+    DWORD          dwHashTableSize;             // Size of the hash table. Also size of the hash table
     DWORD          dwFileTableSize;             // Current size of the file table, e.g. index of the entry past the last occupied one
     DWORD          dwReservedFiles;             // Number of entries reserved for internal MPQ files (listfile, attributes)
     DWORD          dwSectorSize;                // Default size of one file sector
@@ -849,10 +870,10 @@ typedef struct _TMPQArchive
     ULONGLONG      CompactBytesProcessed;       // Amount of bytes that have been processed during a particular compact call
     ULONGLONG      CompactTotalBytes;           // Total amount of bytes to be compacted
     void         * pvCompactUserData;           // User data thats passed to the callback
-} TMPQArchive;
+};
 
 // File handle structure
-typedef struct _TMPQFile
+struct TMPQFile
 {
     TFileStream  * pStream;                     // File stream. Only used on local files
     TMPQArchive  * ha;                          // Archive handle
@@ -865,7 +886,7 @@ typedef struct _TMPQFile
     DWORD          dwFilePos;                   // Current file position
     DWORD          dwMagic;                     // 'FILE'
 
-    struct _TMPQFile * hfPatch;                 // Pointer to opened patch file
+    TMPQFile     * hfPatch;                     // Pointer to opened patch file
 
     TPatchInfo   * pPatchInfo;                  // Patch info block, preceding the sector table
     LPDWORD        SectorOffsets;               // Position of each file sector, relative to the begin of the file. Only for compressed files.
@@ -889,7 +910,7 @@ typedef struct _TMPQFile
     bool           bLoadedSectorCRCs;           // If true, we already tried to load sector CRCs
     bool           bCheckSectorCRCs;            // If true, then SFileReadFile will check sector CRCs when reading the file
     bool           bIsWriteHandle;              // If true, this handle has been created by SFileCreateFile
-} TMPQFile;
+};
 
 // Structure for SFileFindFirstFile and SFileFindNextFile
 typedef struct _SFILE_FIND_DATA

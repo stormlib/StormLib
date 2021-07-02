@@ -109,6 +109,15 @@ typedef struct _MPQ_SIGNATURE_INFO
 } MPQ_SIGNATURE_INFO, *PMPQ_SIGNATURE_INFO;
 
 //-----------------------------------------------------------------------------
+// Other private structures
+
+typedef struct _MPQ_HASH_ENTRIES
+{
+    THashEntry * pHashEntry1;                   // Entry with matched locale and platform. The best match.
+    THashEntry * pHashEntry2;                   // Entry with neutral locale. The second-best match
+} MPQ_HASH_ENTRIES, *PMPQ_HASH_ENTRIES;
+
+//-----------------------------------------------------------------------------
 // Memory management
 //
 // We use our own macros for allocating/freeing memory. If you want
@@ -140,7 +149,8 @@ typedef struct _MPQ_SIGNATURE_INFO
 extern DWORD g_dwMpqSignature;                  // Marker for MPQ header
 extern DWORD g_dwHashTableKey;                  // Key for hash table
 extern DWORD g_dwBlockTableKey;                 // Key for block table
-extern LCID  g_lcFileLocale;                    // Preferred file locale
+extern LCID  g_FileLocale;                      // Preferred file locale
+extern BYTE  g_Platform;                        // Preferred platform
 
 //-----------------------------------------------------------------------------
 // Conversion to uppercase/lowercase (and "/" to "\")
@@ -254,6 +264,8 @@ TMPQHash * GetFirstHashEntry(TMPQArchive * ha, const char * szFileName);
 TMPQHash * GetNextHashEntry(TMPQArchive * ha, TMPQHash * pFirstHash, TMPQHash * pPrevHash);
 TMPQHash * AllocateHashEntry(TMPQArchive * ha, TFileEntry * pFileEntry, LCID lcLocale);
 
+bool FindHashEntry(TMPQArchive * ha, const char * szFileName, LCID Locale, BYTE Platform, MPQ_HASH_ENTRIES & Entries);
+
 TMPQExtHeader * LoadExtTable(TMPQArchive * ha, ULONGLONG ByteOffset, size_t Size, DWORD dwSignature, DWORD dwKey);
 TMPQHetTable * LoadHetTable(TMPQArchive * ha);
 TMPQBetTable * LoadBetTable(TMPQArchive * ha);
@@ -286,6 +298,7 @@ TFileEntry * GetFileEntryLocale(TMPQArchive * ha, const char * szFileName, LCID 
 TFileEntry * GetFileEntryExact(TMPQArchive * ha, const char * szFileName, LCID lcLocale, LPDWORD PtrHashIndex);
 
 // Allocates file name in the file entry
+void AllocateFileName(TMPQArchive * ha, THashEntry * pHashEntry, const char * szFileName);
 void AllocateFileName(TMPQArchive * ha, TFileEntry * pFileEntry, const char * szFileName);
 
 // Allocates new file entry in the MPQ tables. Reuses existing, if possible

@@ -1466,11 +1466,6 @@ static TFileData * LoadMpqFile(TLogHelper * pLogger, HANDLE hMpq, LPCSTR szFileN
     // Notify the user that we are loading a file from MPQ
     pLogger->PrintProgress("Loading file %s ...", GetShortPlainName(szFileName));
 
-#if defined(_MSC_VER) && defined(_DEBUG)
-//  if(!_stricmp(szFileName, "File00000733.wav"))
-//      __debugbreak();
-#endif
-
     // Make sure that we open the proper locale file
     SFileSetLocale(lcLocale);
 

@@ -185,13 +185,13 @@ bool WINAPI SFileSetArchiveMarkers(PSFILE_MARKERS pMarkers)
 
 LCID WINAPI SFileGetLocale()
 {
-    return g_lcFileLocale;
+    return g_FileLocale;
 }
 
 LCID WINAPI SFileSetLocale(LCID lcNewLocale)
 {
-    g_lcFileLocale = lcNewLocale;
-    return g_lcFileLocale;
+    g_FileLocale = lcNewLocale;
+    return g_FileLocale;
 }
 
 //-----------------------------------------------------------------------------

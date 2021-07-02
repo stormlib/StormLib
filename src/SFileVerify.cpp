@@ -592,7 +592,7 @@ static DWORD VerifyFile(
                 dwVerifyResult |= VERIFY_FILE_HAS_RAW_MD5;
 
                 // Find file entry for the file
-                pFileEntry = GetFileEntryLocale(ha, szFileName, g_lcFileLocale);
+                pFileEntry = GetFileEntryLocale(ha, szFileName, g_FileLocale);
                 if(pFileEntry != NULL)
                 {
                     // If the file's raw MD5 doesn't match, don't bother with more checks
@@ -964,7 +964,7 @@ DWORD WINAPI SFileVerifyRawData(HANDLE hMpq, DWORD dwWhatToVerify, const char * 
                 return ERROR_INVALID_PARAMETER;
 
             // Get the offset of a file
-            pFileEntry = GetFileEntryLocale(ha, szFileName, g_lcFileLocale);
+            pFileEntry = GetFileEntryLocale(ha, szFileName, g_FileLocale);
             if(pFileEntry == NULL)
                 return ERROR_FILE_NOT_FOUND;
 

@@ -15,7 +15,7 @@
 #include "StormLib.h"
 #include "StormCommon.h"
 
-char StormLibCopyright[] = "StormLib v " STORMLIB_VERSION_STRING " Copyright Ladislav Zezula 1998-2014";
+char StormLibCopyright[] = "StormLib v " STORMLIB_VERSION_STRING " Copyright Ladislav Zezula 1998-2021";
 
 //-----------------------------------------------------------------------------
 // Local variables
@@ -23,8 +23,8 @@ char StormLibCopyright[] = "StormLib v " STORMLIB_VERSION_STRING " Copyright Lad
 DWORD g_dwMpqSignature = ID_MPQ;                // Marker for MPQ header
 DWORD g_dwHashTableKey = MPQ_KEY_HASH_TABLE;    // Key for hash table
 DWORD g_dwBlockTableKey = MPQ_KEY_BLOCK_TABLE;  // Key for block table
-LCID  g_lcFileLocale = LANG_NEUTRAL;            // File locale
-USHORT  wPlatform = 0;                          // File platform
+LCID  g_FileLocale = LANG_NEUTRAL;              // File locale
+BYTE  g_Platform = 0;                           // File platform
 
 //-----------------------------------------------------------------------------
 // Conversion to uppercase/lowercase
@@ -778,6 +778,7 @@ TMPQHash * FindFreeHashEntry(TMPQArchive * ha, DWORD dwStartIndex, DWORD dwName1
 
 // Retrieves the first hash entry for the given file.
 // Every locale version of a file has its own hash entry
+// TODO: Remove this function
 TMPQHash * GetFirstHashEntry(TMPQArchive * ha, const char * szFileName)
 {
     DWORD dwHashIndexMask = HASH_INDEX_MASK(ha);
@@ -837,6 +838,71 @@ TMPQHash * GetNextHashEntry(TMPQArchive * ha, TMPQHash * pFirstHash, TMPQHash * 
         if(pHash->dwBlockIndex == HASH_ENTRY_FREE)
             return NULL;
     }
+}
+
+//
+// The search algorithm is based on what's in Storm.dll (Warcraft III 1.26a) at 15017860
+// 1. If there is exact match in the Locale & Platform, this entry is returned as the first one
+// 2. If the hash entry has locale & platform 0, that one is considered "best match".
+//
+
+bool FindHashEntry(TMPQArchive * ha, const char * szFileName, LCID FileLocale, BYTE Platform, MPQ_HASH_ENTRIES & Entries)
+{
+    THashEntry * pHash;
+    DWORD dwStartIndex = ha->pfnHashString(szFileName, MPQ_HASH_TABLE_INDEX);
+    DWORD dwName1 = ha->pfnHashString(szFileName, MPQ_HASH_NAME_A);
+    DWORD dwName2 = ha->pfnHashString(szFileName, MPQ_HASH_NAME_B);
+    DWORD dwIndex;
+
+    // Reset the structure
+    Entries.pHashEntry1 = NULL;
+    Entries.pHashEntry2 = NULL;
+
+    // Set the initial index
+    dwStartIndex = dwIndex = (dwStartIndex % ha->dwHashTableSize);
+
+    // Check for the termination entry. According to Storm.dll, it is done on the startup entry only
+    // Storm.dll: 150178AD (Warcraft III 1.26a)
+    if(ha->pHashTableX[dwIndex].dwBlockIndex == HASH_ENTRY_FREE)
+        return false;
+
+    // Search the entire hash entry
+    do
+    {
+        // Get the hash entry corresponding to the index. Check for the terminating entry
+        pHash = ha->pHashTableX + dwIndex;
+
+        // Check for name match
+        // Storm.dll: 150178B8 (Warcraft III 1.26a)
+        if(pHash->Name.n32.lo == dwName1 && pHash->Name.n32.hi == dwName2 && pHash->dwBlockIndex != HASH_ENTRY_DELETED)
+        {
+            // Check for exact match. Note that in Warcraft III, this is usually called with nonzero locale
+            // Storm.dll: 150178CF(Warcraft III 1.26a)
+            if((FileLocale || Platform) && (pHash->Locale == FileLocale && pHash->Platform == Platform))
+            {
+                // Only take the first one
+                if(Entries.pHashEntry1 == NULL)
+                    Entries.pHashEntry1 = pHash;
+            }
+
+            // If both locale and platform in the entry is zero, we set this one as "second-best match"
+            // Storm.dll: 150178DF (Warcraft III 1.26a)
+            if(pHash->Locale == 0 || pHash->Locale == FileLocale)
+            {
+                if(pHash->Platform == 0 || pHash->Platform == Platform)
+                {
+                    Entries.pHashEntry2 = pHash;
+                }
+            }
+        }
+
+        // Move to the next hash entry. Stop if we reached the start entry
+        dwIndex = (dwIndex + 1) % ha->dwHashTableSize;
+    }
+    while(dwIndex != dwStartIndex);
+
+    // Return whether we found something
+    return (Entries.pHashEntry1 || Entries.pHashEntry2);
 }
 
 // Allocates an entry in the hash table
@@ -1700,7 +1766,7 @@ void FreeArchiveHandle(TMPQArchive *& ha)
         FileStream_Close(ha->pStream);
         ha->pStream = NULL;
 
-        // Free the file names from the file table
+        // Free file names from the file table
         if(ha->pFileTable != NULL)
         {
             for(DWORD i = 0; i < ha->dwFileTableSize; i++)
@@ -1710,8 +1776,22 @@ void FreeArchiveHandle(TMPQArchive *& ha)
                 ha->pFileTable[i].szFileName = NULL;
             }
 
-            // Then free all buffers allocated in the archive structure
+            // Then free the file table itself
             STORM_FREE(ha->pFileTable);
+        }
+
+        // Free file names from the hash table
+        if(ha->pHashTableX != NULL)
+        {
+            for(DWORD i = 0; i < ha->dwHashTableSize; i++)
+            {
+                if(ha->pHashTableX[i].szFileName != NULL)
+                    STORM_FREE(ha->pHashTableX[i].szFileName);
+                ha->pHashTableX[i].szFileName = NULL;
+            }
+
+            // Then free the hash table itself
+            STORM_FREE(ha->pHashTableX);
         }
 
         if(ha->pHashTable != NULL)
