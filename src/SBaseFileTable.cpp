@@ -736,16 +736,16 @@ bool IsValidHashEntry(TMPQArchive * ha, TMPQHash * pHash)
 }
 
 // Hash entry verification when the file table does not exist yet
-static bool IsValidHashEntry1(TMPQArchive * ha, TMPQHash * pHash, TMPQBlock * pBlockTable)
+static bool IsValidHashEntry1(TMPQArchive * ha, THashEntry * pHash, TMPQBlock * pBlockTable)
 {
     ULONGLONG ByteOffset;
     TMPQBlock * pBlock;
 
     // The block index is considered valid if it's less than block table size
-    if(MPQ_BLOCK_INDEX(pHash) < ha->pHeader->dwBlockTableSize)
+    if(pHash->dwBlockIndex < ha->pHeader->dwBlockTableSize)
     {
         // Calculate the block table position
-        pBlock = pBlockTable + MPQ_BLOCK_INDEX(pHash);
+        pBlock = pBlockTable + pHash->dwBlockIndex;
 
         // Check whether this is an existing file
         // Also we do not allow to be file size greater than 2GB
@@ -820,15 +820,15 @@ static TMPQHash * GetHashEntryExact(TMPQArchive * ha, const char * szFileName, L
 // are not HASH_ENTRY_FREE, the startup search index does not matter.
 // Hash table is circular, so as long as there is no terminator,
 // all entries will be found.
-static TMPQHash * DefragmentHashTable(
+static THashEntry * DefragmentHashTable(
     TMPQArchive * ha,
-    TMPQHash  * pHashTable,
+    THashEntry * pHashTable,
     TMPQBlock * pBlockTable)
 {
     TMPQHeader * pHeader = ha->pHeader;
-    TMPQHash * pHashTableEnd = pHashTable + pHeader->dwHashTableSize;
-    TMPQHash * pSource = pHashTable;
-    TMPQHash * pTarget = pHashTable;
+    THashEntry * pHashTableEnd = pHashTable + pHeader->dwHashTableSize;
+    THashEntry* pSource = pHashTable;
+    THashEntry* pTarget = pHashTable;
     DWORD dwFirstFreeEntry;
     DWORD dwNewTableSize;
 
@@ -858,7 +858,7 @@ static TMPQHash * DefragmentHashTable(
     // Fill the rest with entries that look like deleted
     pHashTableEnd = pHashTable + dwNewTableSize;
     pSource = pHashTable + dwFirstFreeEntry;
-    memset(pSource, 0xFF, (dwNewTableSize - dwFirstFreeEntry) * sizeof(TMPQHash));
+    memset(pSource, 0xFF, (dwNewTableSize - dwFirstFreeEntry) * sizeof(THashEntry));
 
     // Mark the block indexes as deleted
     for(; pSource < pHashTableEnd; pSource++)
@@ -867,24 +867,24 @@ static TMPQHash * DefragmentHashTable(
     // Free some of the space occupied by the hash table
     if(dwNewTableSize < pHeader->dwHashTableSize)
     {
-        pHashTable = STORM_REALLOC(TMPQHash, pHashTable, dwNewTableSize);
-        ha->pHeader->BlockTableSize64 = dwNewTableSize * sizeof(TMPQHash);
+        pHashTable = STORM_REALLOC(THashEntry, pHashTable, dwNewTableSize);
+        ha->pHeader->BlockTableSize64 = dwNewTableSize * sizeof(THashEntry);
         ha->pHeader->dwHashTableSize = dwNewTableSize;
     }
 
     return pHashTable;
 }
 
-static DWORD BuildFileTableFromBlockTable(
+static DWORD BuildFileTableFromBlockTable_OLD(
     TMPQArchive * ha,
     TMPQBlock * pBlockTable)
 {
     TFileEntry * pFileEntry;
     TMPQHeader * pHeader = ha->pHeader;
+    THashEntry * pHashTableEnd;
+    THashEntry * pHash;
     TMPQBlock * pBlock;
-    TMPQHash * pHashTableEnd;
-    TMPQHash * pHash;
-    LPDWORD DefragmentTable = NULL;
+    LPDWORD NewBlockIndex = NULL;
     DWORD dwItemCount = 0;
     DWORD dwFlagMask;
 
@@ -898,30 +898,30 @@ static DWORD BuildFileTableFromBlockTable(
     // Defragment the hash table, if needed
     if(ha->dwFlags & MPQ_FLAG_HASH_TABLE_CUT)
     {
-        ha->pHashTable = DefragmentHashTable(ha, ha->pHashTable, pBlockTable);
+        ha->pHashTableX = DefragmentHashTable(ha, ha->pHashTableX, pBlockTable);
         ha->dwMaxFileCount = pHeader->dwHashTableSize;
     }
 
     // On any malformation, we defragment the block table, which helps
     // against being flooded by high amount of invalid entries in the block table
-    if(ha->dwFlags & (MPQ_FLAG_HASH_TABLE_CUT | MPQ_FLAG_BLOCK_TABLE_CUT))
+    if(ha->dwFlags & MPQ_FLAG_MALFORMED)
     {
         // Sanity checks
         assert(pHeader->wFormatVersion == MPQ_FORMAT_VERSION_1);
         assert(pHeader->HiBlockTablePos64 == 0);
 
         // Allocate the translation table
-        DefragmentTable = STORM_ALLOC(DWORD, pHeader->dwBlockTableSize);
-        if(DefragmentTable == NULL)
+        NewBlockIndex = STORM_ALLOC(DWORD, pHeader->dwBlockTableSize);
+        if(NewBlockIndex == NULL)
             return ERROR_NOT_ENOUGH_MEMORY;
 
         // Fill the translation table
-        memset(DefragmentTable, 0xFF, pHeader->dwBlockTableSize * sizeof(DWORD));
+        memset(NewBlockIndex, 0xFF, pHeader->dwBlockTableSize * sizeof(DWORD));
     }
 
     // Parse the entire hash table
-    pHashTableEnd = ha->pHashTable + pHeader->dwHashTableSize;
-    for(pHash = ha->pHashTable; pHash < pHashTableEnd; pHash++)
+    pHashTableEnd = ha->pHashTableX + pHeader->dwHashTableSize;
+    for(pHash = ha->pHashTableX; pHash < pHashTableEnd; pHash++)
     {
         //
         // We need to properly handle these cases:
@@ -935,22 +935,22 @@ static DWORD BuildFileTableFromBlockTable(
 
         if(IsValidHashEntry1(ha, pHash, pBlockTable))
         {
-            DWORD dwOldIndex = MPQ_BLOCK_INDEX(pHash);
-            DWORD dwNewIndex = MPQ_BLOCK_INDEX(pHash);
+            DWORD dwOldIndex = pHash->dwBlockIndex;
+            DWORD dwNewIndex = pHash->dwBlockIndex;
 
             // Determine the new block index
-            if(DefragmentTable != NULL)
+            if(NewBlockIndex != NULL)
             {
                 // Need to handle case when multiple hash
                 // entries point to the same block entry
-                if(DefragmentTable[dwOldIndex] == HASH_ENTRY_FREE)
+                if(NewBlockIndex[dwOldIndex] == HASH_ENTRY_FREE)
                 {
-                    DefragmentTable[dwOldIndex] = dwItemCount;
+                    NewBlockIndex[dwOldIndex] = dwItemCount;
                     dwNewIndex = dwItemCount++;
                 }
                 else
                 {
-                    dwNewIndex = DefragmentTable[dwOldIndex];
+                    dwNewIndex = NewBlockIndex[dwOldIndex];
                 }
 
                 // Fix the pointer in the hash entry
@@ -977,7 +977,7 @@ static DWORD BuildFileTableFromBlockTable(
     }
 
     // Free the translation table
-    if(DefragmentTable != NULL)
+    if(NewBlockIndex != NULL)
     {
         // If we defragmented the block table in the process,
         // free some memory by shrinking the file table
@@ -992,11 +992,45 @@ static DWORD BuildFileTableFromBlockTable(
 //      DumpFileTable(ha->pFileTable, ha->dwFileTableSize);
 
         // Free the translation table
-        STORM_FREE(DefragmentTable);
+        STORM_FREE(NewBlockIndex);
     }
 
     return ERROR_SUCCESS;
 }
+
+static DWORD BuildFileTableFromBlockTable(
+    TMPQArchive* ha,
+    TMPQBlock* pBlockTable)
+{
+    TFileEntry * pFileEntry = ha->pFileTable;
+    TMPQHeader * pHeader = ha->pHeader;
+    TMPQBlock * pBlock = pBlockTable;
+    DWORD dwFlagMask;
+
+    // Sanity checks
+    assert(ha->dwFileTableSize >= ha->dwMaxFileCount);
+    assert(ha->pFileTable != NULL);
+
+    // MPQs for Warcraft III doesn't know some flags, namely MPQ_FILE_SINGLE_UNIT and MPQ_FILE_PATCH_FILE
+    dwFlagMask = (ha->dwFlags & MPQ_FLAG_WAR3_MAP) ? MPQ_FILE_VALID_FLAGS_W3X : MPQ_FILE_VALID_FLAGS;
+
+    // Translate the block table into file table
+    for(DWORD i = 0; i < pHeader->dwBlockTableSize; i++, pBlock++, pFileEntry++)
+    {
+        // ByteOffset is only valid if file size is not zero
+        pFileEntry->ByteOffset = pBlock->dwFilePos;
+        if(pFileEntry->ByteOffset == 0 && pBlock->dwFSize == 0)
+            pFileEntry->ByteOffset = ha->pHeader->dwHeaderSize;
+
+        // Fill the rest of the file entry
+        pFileEntry->dwFileSize = pBlock->dwFSize;
+        pFileEntry->dwCmpSize = pBlock->dwCSize;
+        pFileEntry->dwFlags = pBlock->dwFlags & dwFlagMask;
+    }
+
+    return ERROR_SUCCESS;
+}
+
 
 static TMPQHash * TranslateHashTable(
     TMPQArchive * ha,
@@ -2564,7 +2598,7 @@ static DWORD BuildFileTable_Classic(TMPQArchive * ha)
 {
     TMPQHeader * pHeader = ha->pHeader;
     TMPQBlock * pBlockTable;
-    DWORD dwErrCode = ERROR_SUCCESS;
+    DWORD dwErrCode = ERROR_NOT_ENOUGH_MEMORY;
 
     // Sanity checks
     assert(ha->pHashTableX != NULL);
@@ -2576,16 +2610,12 @@ static DWORD BuildFileTable_Classic(TMPQArchive * ha)
     assert(ha->dwFileTableSize >= pHeader->dwBlockTableSize);
 
     // Load the block table
-    // WARNING! ha->pFileTable can change in the process!!
     pBlockTable = (TMPQBlock *)LoadBlockTable(ha);
     if(pBlockTable != NULL)
     {
+        // Rebuild the block table into our file table
         dwErrCode = BuildFileTableFromBlockTable(ha, pBlockTable);
         STORM_FREE(pBlockTable);
-    }
-    else
-    {
-        dwErrCode = ERROR_NOT_ENOUGH_MEMORY;
     }
 
     // Load the hi-block table

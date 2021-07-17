@@ -4297,10 +4297,9 @@ int _tmain(int argc, TCHAR * argv[])
     // Open all files from the command line
     //
 
-	TestArchive(_T("ProblemMpqArchive.SC2Replay"), NULL, 0, "replay.game.events", NULL);
     for(int i = 1; i < argc; i++)
     {
-        TestOpenArchive_CompactArchive(argv[i], _T("TestArchiveCopy.mpq"), false);
+        TestArchive(argv[i], NULL, 0, NULL, NULL);
     }
 
     //
